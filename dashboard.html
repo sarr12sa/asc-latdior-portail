@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon espace — ASC LATDIOR</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="scoreboard">
+  <div class="top-nav" style="position:relative; z-index:1;">
+    <div class="scoreboard-top">
+      <div class="crest">AL</div>
+      <div>
+        <h1 style="font-size:22px;">ASC LATDIOR</h1>
+        <p class="sub">Mon espace membre</p>
+      </div>
+    </div>
+    <a href="#" id="logoutBtn" class="logout-link">Déconnexion</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="member-card">
+    <div class="top">
+      <div>
+        <div class="name" id="memberName">—</div>
+        <div class="role" id="memberRole">Membre</div>
+      </div>
+      <div style="font-size:11px; color:#F1E7D0; text-align:right;">
+        Carte n°<br><span id="memberId">—</span>
+      </div>
+    </div>
+    <div class="bottom">
+      <span>Inscrit depuis</span>
+      <span id="memberSince">—</span>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <h2 class="section-title" style="font-size:16px;">Cotisation</h2>
+    <div class="cotis-block">
+      <div class="cotis-label">
+        <span id="cotisText">— / —</span>
+        <span id="cotisPercent">—</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="cotisFill" style="width:0%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-row" style="margin-top:16px;">
+    <div class="stat">
+      <span class="value" id="presenceValue">0</span>
+      <span class="label">Présences enregistrées</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">Historique des présences</h2>
+    <div id="presenceList">
+      <div class="empty-state">Aucune présence enregistrée pour l'instant.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">Messages du bureau</h2>
+    <div id="messageList">
+      <div class="empty-state">Pas de nouveau message.</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+auth.onAuthStateChanged(async (user) => {
+  if (!user) {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  const doc = await db.collection('membres').doc(user.uid).get();
+  if (!doc.exists) return;
+  const data = doc.data();
+
+  document.getElementById('memberName').textContent = data.nom || user.email;
+  document.getElementById('memberRole').textContent = data.role === 'admin' ? 'Bureau' : 'Membre';
+  document.getElementById('memberId').textContent = user.uid.slice(0, 8).toUpperCase();
+  document.getElementById('memberSince').textContent = data.dateInscription
+    ? new Date(data.dateInscription).toLocaleDateString('fr-FR')
+    : '—';
+
+  const montant = data.cotisationMontant || 0;
+  const paye = data.cotisationPaye || 0;
+  const pct = montant > 0 ? Math.min(100, Math.round((paye / montant) * 100)) : 0;
+
+  document.getElementById('cotisText').textContent =
+    `${paye.toLocaleString('fr-FR')} / ${montant.toLocaleString('fr-FR')} FCFA`;
+  document.getElementById('cotisPercent').textContent = pct + '%';
+  const fill = document.getElementById('cotisFill');
+  fill.style.width = pct + '%';
+  if (pct >= 100) fill.classList.add('complete');
+
+  // Présences
+  const presencesSnap = await db.collection('membres').doc(user.uid)
+    .collection('presences').orderBy('date', 'desc').get();
+
+  document.getElementById('presenceValue').textContent = presencesSnap.size;
+
+  if (!presencesSnap.empty) {
+    const list = document.getElementById('presenceList');
+    list.innerHTML = '';
+    presencesSnap.forEach(p => {
+      const d = p.data();
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;';
+      row.innerHTML = `<span>${d.evenement || 'Activité'}</span><span style="color:#6b6459;">${d.date}</span>`;
+      list.appendChild(row);
+    });
+  }
+
+  // Lien vers le panneau admin si rôle admin
+  if (data.role === 'admin') {
+    const link = document.createElement('a');
+    link.href = 'admin.html';
+    link.textContent = 'Ouvrir le panneau du bureau →';
+    link.style.cssText = 'display:block; text-align:center; margin-top:16px; color:var(--pitch); font-size:14px; font-weight:600;';
+    document.querySelector('.wrap').appendChild(link);
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await auth.signOut();
+  window.location.href = 'index.html';
+});
+</script>
+
+</body>
+</html>
