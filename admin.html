@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panneau du bureau — ASC LATDIOR</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" type="image/jpeg" href="logo-asclatdior.jpg">
+<style>
+  .crest-logo {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<header class="scoreboard">
+  <div class="top-nav" style="position:relative; z-index:1;">
+    <div class="scoreboard-top">
+      <div class="crest"><img src="logo-asclatdior.jpg" alt="Logo ASC LATDIOR" class="crest-logo"></div>
+      <div>
+        <h1 style="font-size:22px;">Panneau du bureau</h1>
+        <p class="sub">Gestion des membres — ASC LATDIOR</p>
+      </div>
+    </div>
+    <a href="dashboard.html" class="logout-link">← Mon espace</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="accessDenied" class="panel" style="display:none;">
+    <p>Cet espace est réservé au bureau. <a href="dashboard.html">Retour à mon espace</a></p>
+  </div>
+
+  <div id="adminContent" style="display:none;">
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="membres">Membres</button>
+      <button class="tab-btn" data-tab="ajouter-membre">Ajouter un membre</button>
+      <button class="tab-btn" data-tab="presence">Marquer présence</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-membres">
+      <div class="panel">
+        <h2 class="section-title">Liste des membres</h2>
+        <div id="membersList">
+          <div class="empty-state">Chargement…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-ajouter-membre">
+      <div class="panel">
+        <h2 class="section-title">Ajouter un membre</h2>
+        <p class="help-text" style="text-align:left; margin-top:0;">
+          Utilise ce formulaire pour un membre qui n'a pas encore créé son propre
+          compte. Il pourra se connecter plus tard en créant un accès avec la
+          même adresse email — préviens-le de te donner l'email exact que tu
+          utilises ici.
+        </p>
+        <form id="addMemberForm">
+          <label class="field-label" for="newNom">Nom complet</label>
+          <input type="text" id="newNom" required placeholder="Ex : Modou Fall">
+
+          <label class="field-label" for="newEmail">Email (optionnel)</label>
+          <input type="text" id="newEmail" placeholder="modou@exemple.com">
+
+          <label class="field-label" for="newMontant">Montant de la cotisation (FCFA)</label>
+          <input type="number" id="newMontant" required value="5000" min="0">
+
+          <button type="submit" class="btn">Ajouter le membre</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-presence">
+      <div class="panel">
+        <h2 class="section-title">Enregistrer une présence</h2>
+        <form id="presenceForm">
+          <label class="field-label" for="memberSelect">Membre</label>
+          <select id="memberSelect" required></select>
+
+          <label class="field-label" for="eventName">Activité</label>
+          <input type="text" id="eventName" required placeholder="Ex : Match Navétane vs Diass">
+
+          <label class="field-label" for="eventDate">Date</label>
+          <input type="text" id="eventDate" required placeholder="JJ/MM/AAAA">
+
+          <button type="submit" class="btn">Enregistrer</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+let allMembers = [];
+
+auth.onAuthStateChanged(async (user) => {
+  if (!user) { window.location.href = 'index.html'; return; }
+
+  const myDoc = await db.collection('membres').doc(user.uid).get();
+  if (!myDoc.exists || myDoc.data().role !== 'admin') {
+    document.getElementById('accessDenied').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('adminContent').style.display = 'block';
+  await loadMembers();
+});
+
+async function loadMembers() {
+  const snap = await db.collection('membres').get();
+  allMembers = [];
+  const list = document.getElementById('membersList');
+  const select = document.getElementById('memberSelect');
+  list.innerHTML = '';
+  select.innerHTML = '';
+
+  if (snap.empty) {
+    list.innerHTML = '<div class="empty-state">Aucun membre pour l\'instant.</div>';
+    return;
+  }
+
+  snap.forEach(doc => {
+    const d = doc.data();
+    allMembers.push({ id: doc.id, ...d });
+
+    const opt = document.createElement('option');
+    opt.value = doc.id;
+    opt.textContent = d.nom;
+    select.appendChild(opt);
+
+    const montant = d.cotisationMontant || 0;
+    const paye = d.cotisationPaye || 0;
+    const pct = montant > 0 ? Math.min(100, Math.round((paye / montant) * 100)) : 0;
+
+    const row = document.createElement('div');
+    row.className = 'member-row';
+    row.innerHTML = `
+      <div class="row-top">
+        <span class="name">${d.nom}</span>
+        <span style="font-size:12px; color:#6b6459;">${d.role === 'admin' ? 'Bureau' : 'Membre'}</span>
+      </div>
+      <div class="cotis-block">
+        <div class="cotis-label">
+          <span>${paye.toLocaleString('fr-FR')} / ${montant.toLocaleString('fr-FR')} FCFA</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill ${pct >= 100 ? 'complete' : ''}" style="width:${pct}%;"></div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="btn-small add-payment" data-id="${doc.id}" data-montant="${montant}" data-paye="${paye}">+ Ajouter un versement</button>
+        <button class="btn-small edit-montant" data-id="${doc.id}" data-montant="${montant}">Modifier montant</button>
+      </div>
+      <div class="row-actions">
+        <button class="btn-small reset-payment" data-id="${doc.id}">Réinitialiser</button>
+        <button class="btn-small delete-member" data-id="${doc.id}" data-nom="${d.nom}" style="border-color:var(--clay); color:var(--clay);">Supprimer ce membre</button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+
+  document.querySelectorAll('.add-payment').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const montant = Number(btn.dataset.montant);
+      const paye = Number(btn.dataset.paye);
+      const input = prompt('Montant du versement reçu (FCFA) :');
+      if (input === null) return;
+      const amount = Number(input);
+      if (isNaN(amount) || amount <= 0) {
+        alert('Entre un montant valide.');
+        return;
+      }
+      const newPaye = Math.min(montant, paye + amount);
+      await db.collection('membres').doc(id).update({ cotisationPaye: newPaye });
+      await loadMembers();
+    });
+  });
+
+  document.querySelectorAll('.edit-montant').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const current = btn.dataset.montant;
+      const input = prompt('Nouveau montant total de la cotisation (FCFA) :', current);
+      if (input === null) return;
+      const amount = Number(input);
+      if (isNaN(amount) || amount < 0) {
+        alert('Entre un montant valide.');
+        return;
+      }
+      await db.collection('membres').doc(id).update({ cotisationMontant: amount });
+      await loadMembers();
+    });
+  });
+
+  document.querySelectorAll('.reset-payment').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!confirm('Remettre la cotisation de ce membre à zéro ?')) return;
+      await db.collection('membres').doc(id).update({ cotisationPaye: 0 });
+      await loadMembers();
+    });
+  });
+
+  document.querySelectorAll('.delete-member').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const nom = btn.dataset.nom;
+      if (!confirm(`Supprimer définitivement ${nom} ? Cette action est irréversible.`)) return;
+      await db.collection('membres').doc(id).delete();
+      await loadMembers();
+    });
+  });
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('addMemberForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nom = document.getElementById('newNom').value;
+  const email = document.getElementById('newEmail').value;
+  const montant = Number(document.getElementById('newMontant').value);
+
+  await db.collection('membres').add({
+    nom,
+    email: email || '',
+    role: 'membre',
+    cotisationMontant: montant,
+    cotisationPaye: 0,
+    hasAccount: false,
+    dateInscription: new Date().toISOString()
+  });
+
+  document.getElementById('addMemberForm').reset();
+  document.getElementById('newMontant').value = 5000;
+  alert('Membre ajouté.');
+
+  document.querySelector('.tab-btn[data-tab="membres"]').click();
+  await loadMembers();
+});
+
+document.getElementById('presenceForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const memberId = document.getElementById('memberSelect').value;
+  const evenement = document.getElementById('eventName').value;
+  const date = document.getElementById('eventDate').value;
+
+  await db.collection('membres').doc(memberId).collection('presences').add({
+    evenement, date
+  });
+
+  document.getElementById('presenceForm').reset();
+  alert('Présence enregistrée.');
+});
+</script>
+
+</body>
+</html>
